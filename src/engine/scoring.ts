@@ -1,6 +1,6 @@
-import type { Card } from "@shared/contracts";
+import type { Card } from "../shared/contracts";
 import { computeSuitCounts, cardBossValue, cardNumericValue } from "./cards";
-import type { CardSuit } from "@shared/contracts";
+import type { CardSuit } from "../shared/contracts";
 
 export interface PlayerComboForScoring {
   seatIndex: number;

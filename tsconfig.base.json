@@ -6,13 +6,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "baseUrl": ".",
-    "paths": {
-      "@shared": ["src/shared/index"],
-      "@shared/*": ["src/shared/*"],
-      "@engine": ["src/engine/index"],
-      "@engine/*": ["src/engine/*"]
-    }
+    "resolveJsonModule": true
   }
 }

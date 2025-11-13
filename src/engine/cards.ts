@@ -1,6 +1,6 @@
 import { v4 as uuid } from "uuid";
-import type { Card, CardRank, CardSuit } from "@shared/contracts";
-import { CARD_RANKS, CARD_SUITS } from "@shared/contracts";
+import type { Card, CardRank, CardSuit } from "../shared/contracts";
+import { CARD_RANKS, CARD_SUITS } from "../shared/contracts";
 
 export function buildShuffledDeck(): Card[] {
   const deck: Card[] = [];

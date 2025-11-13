@@ -1,3 +1,4 @@
+import "tsconfig-paths/register";
 import path from "node:path";
 import fs from "node:fs";
 import Fastify from "fastify";
@@ -12,20 +13,28 @@ import {
   TableSnapshot,
   type ClientToServerEvents,
   type ServerToClientEvents
-} from "@shared/contracts";
-import { BossTable } from "@engine";
+} from "../shared/contracts";
+import { BossTable } from "../engine";
 
 const fastify = Fastify({ logger: true });
 const table = new BossTable();
 
 const clientDistPath = path.join(process.cwd(), "client", "dist");
-if (fs.existsSync(clientDistPath)) {
+const shouldServeClient =
+  process.env.NODE_ENV === "production" && fs.existsSync(clientDistPath);
+
+if (shouldServeClient) {
   fastify.register(fastifyStatic, {
     root: clientDistPath,
     prefix: "/"
   });
-  fastify.get("/*", (_req, reply) => {
-    reply.sendFile("index.html");
+  fastify.setNotFoundHandler((request, reply) => {
+    const acceptsHtml = request.headers.accept?.includes("text/html");
+    if (request.method !== "GET" || !acceptsHtml) {
+      reply.status(404).send({ statusCode: 404, error: "Not Found" });
+      return;
+    }
+    reply.type("text/html").sendFile("index.html");
   });
 }
 

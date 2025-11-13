@@ -12,8 +12,8 @@ import {
   PlayerPrivateState,
   BetActionType,
   TURN_TIMEOUT_MS
-} from "@shared/contracts";
-import type { Card, BettingRound } from "@shared/contracts";
+} from "../shared/contracts";
+import type { Card, BettingRound } from "../shared/contracts";
 import { buildShuffledDeck, cardBossValue } from "./cards";
 import { evaluateCombos, PlayerComboForScoring } from "./scoring";
 import { v4 as uuid } from "uuid";

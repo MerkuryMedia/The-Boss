@@ -29,11 +29,13 @@ export function TableScene({
   const seats = snapshot?.seats ?? [];
   const bossCards = snapshot?.boss.revealedCards ?? [];
   const phaseLabel = snapshot ? snapshot.phase.toUpperCase() : "WAITING";
+  const playerSeat = privateState?.seatIndex;
   const canStart =
     snapshot &&
     ["waiting", "hand_end"].includes(snapshot.phase) &&
-    privateState?.seatIndex !== null &&
-    snapshot.dealerSeat === privateState.seatIndex;
+    playerSeat !== null &&
+    playerSeat !== undefined &&
+    snapshot.dealerSeat === playerSeat;
 
   return (
     <section className="relative mx-auto mt-4 h-[520px] w-full max-w-5xl rounded-[200px] bg-rail/90 p-6 shadow-2xl">
@@ -63,7 +65,7 @@ export function TableScene({
             key={seat.seatIndex}
             seat={seat}
             position={SEAT_POSITIONS[index]}
-            isYou={privateState?.seatIndex === seat.seatIndex}
+            isYou={playerSeat === seat.seatIndex}
             onSeat={() => onSeat(seat.seatIndex)}
             onLeave={onLeaveSeat}
             showTakeSeat={Boolean(privateState && !seat.playerId)}

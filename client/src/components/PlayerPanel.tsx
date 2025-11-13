@@ -27,7 +27,8 @@ export function PlayerPanel({
 
   const selection = privateState.comboSelection;
   const [countdown, setCountdown] = useState(0);
-  const isActing = snapshot?.toActSeat === privateState.seatIndex;
+  const isActing =
+    privateState.seatIndex !== null && snapshot?.toActSeat === privateState.seatIndex;
 
   useEffect(() => {
     if (!snapshot?.actionDeadline || !isActing) {
