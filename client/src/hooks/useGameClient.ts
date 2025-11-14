@@ -54,11 +54,16 @@ export function useGameClient() {
   const leaveSeat = useCallback(() => emit("seat_leave"), [emit]);
 
   const startHand = useCallback(() => emit("start_hand"), [emit]);
+  const restartTable = useCallback(() => emit("restart_table"), [emit]);
 
   const sendBetAction = useCallback(
-    (action: string) => {
+    (action: string, options?: { raiseSteps?: number }) => {
       if (!privateState || privateState.seatIndex === null) return;
-      emit("bet_action", { action, seatIndex: privateState.seatIndex });
+      emit("bet_action", {
+        action,
+        seatIndex: privateState.seatIndex,
+        ...(options?.raiseSteps ? { raiseSteps: options.raiseSteps } : {})
+      });
     },
     [emit, privateState]
   );
@@ -82,6 +87,7 @@ export function useGameClient() {
       takeSeat,
       leaveSeat,
       startHand,
+      restartTable,
       sendBetAction,
       updateCombo,
       submitCombo
@@ -94,6 +100,7 @@ export function useGameClient() {
       takeSeat,
       leaveSeat,
       startHand,
+      restartTable,
       sendBetAction,
       updateCombo,
       submitCombo

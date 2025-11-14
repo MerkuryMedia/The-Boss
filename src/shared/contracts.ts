@@ -77,6 +77,8 @@ export interface SeatPublicState {
   stack: number;
   status: SeatStatus;
   isDealer: boolean;
+  isSmallBlind: boolean;
+  isBigBlind: boolean;
   isActing: boolean;
 }
 
@@ -132,7 +134,8 @@ export type SeatTakeIntent = z.infer<typeof seatTakeSchema>;
 
 export const betActionSchema = z.object({
   action: z.enum(BET_ACTIONS),
-  seatIndex: z.number().int().min(0).max(5)
+  seatIndex: z.number().int().min(0).max(5),
+  raiseSteps: z.number().int().min(1).max(20).optional()
 });
 export type BetIntent = z.infer<typeof betActionSchema>;
 
@@ -155,6 +158,7 @@ export interface ClientToServerEvents {
   seat_take: (payload: SeatTakeIntent) => void;
   seat_leave: () => void;
   start_hand: () => void;
+  restart_table: () => void;
   bet_action: (payload: BetIntent) => void;
   combo_update: (payload: ComboUpdateIntent) => void;
   combo_submit: (payload: ComboSubmitIntent) => void;

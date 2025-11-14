@@ -92,6 +92,17 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("restart_table", () => {
+    const playerId = socketPlayers.get(socket.id);
+    if (!playerId) return emitError(socket, { code: "not_joined" });
+    try {
+      table.restartTable(playerId);
+      sync();
+    } catch (error) {
+      emitError(socket, error);
+    }
+  });
+
   socket.on("bet_action", (payload) => {
     const playerId = socketPlayers.get(socket.id);
     if (!playerId) return emitError(socket, { code: "not_joined" });
@@ -101,7 +112,7 @@ io.on("connection", (socket) => {
       if (seatIndex === null || seatIndex !== data.seatIndex) {
         throw new Error("seat_mismatch");
       }
-      table.betAction(playerId, data.action);
+      table.betAction(playerId, data.action, data.raiseSteps ?? 1);
       sync();
     } catch (error) {
       emitError(socket, error);

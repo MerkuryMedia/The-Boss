@@ -12,12 +12,29 @@ function App() {
     takeSeat,
     leaveSeat,
     startHand,
+    restartTable,
     sendBetAction,
     updateCombo,
     submitCombo
   } = useGameClient();
   const [nameInput, setNameInput] = useState("");
   const joined = Boolean(privateState);
+  const seats = snapshot?.seats ?? [];
+  const handNumber = snapshot?.handNumber ?? 0;
+  const seatedCount = seats.filter((seat) => seat.status !== "open").length;
+  const playerSeat = privateState?.seatIndex ?? null;
+  const dealerSeat = snapshot?.dealerSeat ?? null;
+  const playerSeated = playerSeat !== null;
+  const isDealer = dealerSeat !== null && playerSeat === dealerSeat;
+  const tablePhase = snapshot?.phase ?? "waiting";
+  const phaseAllowsStart = ["waiting", "hand_end"].includes(tablePhase);
+  const enoughPlayers = seatedCount >= 2;
+  const roleAllowsStart = playerSeated && (dealerSeat === null || isDealer);
+  const startButtonVisible = Boolean(
+    joined && roleAllowsStart && phaseAllowsStart && enoughPlayers
+  );
+  const canStartHand = startButtonVisible;
+  const startHandTooltip = !phaseAllowsStart ? "Hand already in progress" : "";
 
   const handleJoin = () => {
     if (!nameInput.trim()) return;
@@ -32,10 +49,10 @@ function App() {
           <div>
             <div className="font-display text-2xl uppercase tracking-wider">The Boss</div>
             <div className="text-xs text-slate-300">
-              Hand #{snapshot?.handNumber ?? 0} · Phase {snapshot?.phase ?? "waiting"}
+              Hand #{snapshot?.handNumber ?? 0} - Phase {snapshot?.phase ?? "waiting"}
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-3 text-sm">
             <span
               className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs ${
                 connected ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"
@@ -61,6 +78,24 @@ function App() {
                 Join
               </button>
             </div>
+            {startButtonVisible && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={startHand}
+                  disabled={!canStartHand}
+                  title={startHandTooltip}
+                  className="rounded-full border border-amber-400/70 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-amber-200 transition hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:border-white/20 disabled:text-white/40"
+                >
+                  Start Hand
+                </button>
+                <button
+                  onClick={restartTable}
+                  className="rounded-full border border-white/30 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-white transition hover:bg-white/10"
+                >
+                  Restart
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -87,3 +122,5 @@ function App() {
 }
 
 export default App;
+
+

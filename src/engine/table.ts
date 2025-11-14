@@ -65,6 +65,8 @@ interface HandRuntime {
   actionType: "bet" | "reveal" | null;
   actionDeadline: number | null;
   dealerSeat: number | null;
+  smallBlindSeat: number | null;
+  bigBlindSeat: number | null;
   oxtailRound: number;
   potTotal: number;
   mainPot: number;
@@ -126,7 +128,10 @@ export class BossTable {
     seat.playerId = playerId;
     seat.status = "waiting";
     player.seatIndex = seatIndex;
-    this.assignInitialDealer();
+    if (this.dealerSeat === null) {
+      this.dealerSeat = seatIndex;
+      this.handState.dealerSeat = seatIndex;
+    }
   }
 
   leaveSeat(playerId: string) {
@@ -162,12 +167,9 @@ export class BossTable {
     const occupiedSeats = this.seats.filter((seat) => seat.playerId);
     if (occupiedSeats.length < 2) throw new Error("need_two_players");
     if (this.dealerSeat === null) {
-      this.dealerSeat = this.randomOccupiedSeat();
+      this.dealerSeat = player.seatIndex;
       this.handState.dealerSeat = this.dealerSeat;
-    } else {
-      this.dealerSeat = this.nextOccupiedSeat(this.dealerSeat);
-    }
-    if (player.seatIndex !== this.dealerSeat) {
+    } else if (player.seatIndex !== this.dealerSeat) {
       throw new Error("only_dealer_starts");
     }
     this.handState = this.createEmptyHand();
@@ -177,6 +179,27 @@ export class BossTable {
     this.handState.phase = "blinds";
     this.prepareHand();
     this.advancePhaseToRush();
+  }
+
+  restartTable(requestingPlayerId: string) {
+    const player = this.players.get(requestingPlayerId);
+    if (!player) throw new Error("player_not_found");
+    if (player.seatIndex === null) throw new Error("not_seated");
+    const occupiedSeats = this.seats.filter((seat) => seat.playerId);
+    if (occupiedSeats.length < 2) throw new Error("need_two_players");
+    this.refundActivePot();
+    this.players.forEach((seatPlayer) => {
+      seatPlayer.hand = [];
+      seatPlayer.comboSelection = { cardIds: [], acesAsEleven: [] };
+      seatPlayer.submittedCombo = null;
+    });
+    this.seats.forEach((seat) => {
+      seat.status = seat.playerId ? "waiting" : "open";
+    });
+    if (this.dealerSeat === null) {
+      this.dealerSeat = player.seatIndex;
+    }
+    this.resetTableToWaiting(true);
   }
 
   private prepareHand() {
@@ -215,6 +238,8 @@ export class BossTable {
     if (this.dealerSeat === null) return;
     const sbSeat = this.nextOccupiedSeat(this.dealerSeat);
     const bbSeat = this.nextOccupiedSeat(sbSeat);
+    this.handState.smallBlindSeat = sbSeat;
+    this.handState.bigBlindSeat = bbSeat;
     this.applyBlind(sbSeat, SMALL_BLIND);
     this.applyBlind(bbSeat, BIG_BLIND);
     this.handState.potTotal += SMALL_BLIND + BIG_BLIND;
@@ -268,7 +293,7 @@ export class BossTable {
       this.handState.actionSeat !== null ? Date.now() + TURN_TIMEOUT_MS : null;
   }
 
-  betAction(playerId: string, action: BetActionType) {
+  betAction(playerId: string, action: BetActionType, raiseSteps = 1) {
     if (!this.handState.betState) throw new Error("no_bet_round");
     if (this.handState.actionSeat === null) throw new Error("no_turn");
     const player = this.players.get(playerId);
@@ -288,7 +313,7 @@ export class BossTable {
         this.handleCall(player.seatIndex);
         break;
       case "raise":
-        this.handleRaise(player.seatIndex);
+        this.handleRaise(player.seatIndex, raiseSteps);
         break;
       case "all_in":
         this.handleAllIn(player.seatIndex);
@@ -328,13 +353,31 @@ export class BossTable {
     }
   }
 
-  private handleRaise(seatIndex: number) {
+  private handleRaise(seatIndex: number, requestedSteps = 1) {
     const betState = this.handState.betState!;
     if (betState.raisesUsed >= MAX_RAISES_PER_ROUND) {
       throw new Error("raise_cap");
     }
     this.handleCall(seatIndex);
-    betState.currentBet += BASE_BET_UNIT;
+    const steps = Math.max(1, requestedSteps);
+    const raiseAmount = BASE_BET_UNIT * steps;
+    const runtime = this.handState.seatRuntime[seatIndex];
+    if (!runtime) throw new Error("seat_not_in_hand");
+    const player = this.playerForSeat(seatIndex);
+    if (!player) throw new Error("player_missing");
+    if (player.bankroll < raiseAmount) {
+      throw new Error("insufficient_stack");
+    }
+    player.bankroll -= raiseAmount;
+    runtime.contributionsThisRound += raiseAmount;
+    runtime.contributionsTotal += raiseAmount;
+    this.handState.potTotal += raiseAmount;
+    this.handState.mainPot = this.handState.potTotal;
+    if (player.bankroll === 0) {
+      runtime.allIn = true;
+      this.seats[seatIndex].status = "all_in";
+    }
+    betState.currentBet = runtime.contributionsThisRound;
     betState.raisesUsed += 1;
     betState.lastAggressor = seatIndex;
     this.resetPendingSeatsExcept(seatIndex);
@@ -615,6 +658,29 @@ export class BossTable {
     this.handState.awaitingCombos = new Set();
     this.handState.bettingRound = null;
     this.handState.actionDeadline = null;
+    this.handState.deck = [];
+    this.handState.bossCards = [];
+    this.handState.bossRevealed = 0;
+    this.handState.smallBlindSeat = null;
+    this.handState.bigBlindSeat = null;
+    this.handState.potTotal = 0;
+    this.handState.mainPot = 0;
+    this.handState.sidePot = 0;
+    this.handState.oxtailRound = 0;
+    this.handState.seatRuntime = {};
+    this.advanceDealerButton();
+  }
+
+  private refundActivePot() {
+    Object.values(this.handState.seatRuntime).forEach((runtime) => {
+      if (runtime.contributionsTotal <= 0) return;
+      const player = this.playerForSeat(runtime.seatIndex);
+      if (!player) return;
+      player.bankroll += runtime.contributionsTotal;
+    });
+    this.handState.potTotal = 0;
+    this.handState.mainPot = 0;
+    this.handState.sidePot = 0;
   }
 
   private resetRoundContributions() {
@@ -650,6 +716,8 @@ export class BossTable {
           stack: seat.playerId ? this.players.get(seat.playerId)?.bankroll ?? 0 : 0,
           status: seat.status,
           isDealer: this.dealerSeat === seat.index,
+          isSmallBlind: this.handState.smallBlindSeat === seat.index,
+          isBigBlind: this.handState.bigBlindSeat === seat.index,
           isActing: this.handState.actionSeat === seat.index
         };
       }),
@@ -831,6 +899,8 @@ export class BossTable {
       actionType: null,
       actionDeadline: null,
       dealerSeat: this.dealerSeat,
+      smallBlindSeat: null,
+      bigBlindSeat: null,
       oxtailRound: 0,
       potTotal: 0,
       mainPot: 0,
@@ -847,9 +917,13 @@ export class BossTable {
   private assignInitialDealer() {
     if (this.dealerSeat !== null) return;
     const occupied = this.seats.filter((seat) => seat.playerId);
-    if (occupied.length < 2) return;
-    const randomSeat = occupied[Math.floor(Math.random() * occupied.length)];
-    this.dealerSeat = randomSeat.index;
+    if (occupied.length === 0) return;
+    const nextDealer = occupied.reduce((best, seat) => {
+      if (!best) return seat;
+      return seat.index < best.index ? seat : best;
+    }, null as SeatState | null);
+    if (!nextDealer) return;
+    this.dealerSeat = nextDealer.index;
     this.handState.dealerSeat = this.dealerSeat;
   }
 
@@ -858,5 +932,34 @@ export class BossTable {
     if (occupied.length === 0) return 0;
     const randomSeat = occupied[Math.floor(Math.random() * occupied.length)];
     return randomSeat.index;
+  }
+
+  private advanceDealerButton() {
+    const occupied = this.seats.filter((seat) => seat.playerId);
+    if (occupied.length === 0) {
+      this.dealerSeat = null;
+      this.handState.dealerSeat = null;
+      this.resetTableToWaiting(false);
+      return;
+    }
+    if (occupied.length === 1) {
+      this.dealerSeat = occupied[0].index;
+      this.handState.dealerSeat = this.dealerSeat;
+      return;
+    }
+    const currentDealer = this.handState.dealerSeat ?? this.dealerSeat ?? occupied[0].index;
+    const nextDealer = this.nextOccupiedSeat(currentDealer);
+    this.dealerSeat = nextDealer;
+    this.handState.dealerSeat = nextDealer;
+  }
+
+  private resetTableToWaiting(preserveDealer: boolean) {
+    this.handCount = 0;
+    this.handState = this.createEmptyHand();
+    if (preserveDealer) {
+      this.handState.dealerSeat = this.dealerSeat;
+    } else {
+      this.dealerSeat = null;
+    }
   }
 }
